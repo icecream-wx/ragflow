@@ -1,0 +1,166 @@
+# =============================================================================
+# RAGFlow 项目 .gitignore — 全面且严谨
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# 环境与密钥（务必忽略，避免泄露）
+# -----------------------------------------------------------------------------
+.env
+.env.local
+.env.*.local
+!.env.example
+*.pem
+*.key
+secrets/
+
+# -----------------------------------------------------------------------------
+# Python
+# -----------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+*.manifest
+*.spec
+pip-log.txt
+pip-delete-this-directory.txt
+.hypothesis/
+*.so
+
+# 虚拟环境（常见命名）
+venv/
+.venv/
+env/
+.env.bak
+
+# -----------------------------------------------------------------------------
+# Node / npm / Vue / Vite / TypeScript
+# -----------------------------------------------------------------------------
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+.pnpm-store/
+.npm
+.yarn-integrity
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
+
+# 构建与预览输出
+dist/
+dist-ssr/
+*.local
+.vite/
+coverage/
+*.tsbuildinfo
+
+# -----------------------------------------------------------------------------
+# 项目运行时与数据（后端 simple-rag）
+# -----------------------------------------------------------------------------
+# 日志目录
+**/logs/
+*.log
+
+# 上传/临时文件（若后续落盘）
+**/uploads/
+**/temp/
+**/tmp/
+**/cache/
+
+# FAISS/向量库持久化文件（若后续改为落盘）
+*.faiss
+*.pkl
+*.index
+
+# -----------------------------------------------------------------------------
+# IDE 与编辑器
+# -----------------------------------------------------------------------------
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json.example
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# -----------------------------------------------------------------------------
+# 操作系统
+# -----------------------------------------------------------------------------
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.directory
+
+# -----------------------------------------------------------------------------
+# 测试与报告
+# -----------------------------------------------------------------------------
+test-results/
+playwright-report/
+playwright/.cache/
+*.lcov
+
+# -----------------------------------------------------------------------------
+# 其他
+# -----------------------------------------------------------------------------
+*.bak
+*.tmp
+*.temp
+.cache/
+*.orig
+
+# Jupyter
+.ipynb_checkpoints/
+
+# 本地/调试用
+*.local
+debug/
+.local/

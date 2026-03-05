@@ -1,0 +1,33 @@
+[tool.poetry]
+name = "simple-rag-backend"
+version = "0.1.0"
+description = "简易 RAG 知识库 - 本地上传 txt/word → 分片索引 → 内存向量存储 → 检索重排生成"
+authors = ["Your Name <your.email@example.com>"]
+readme = "README.md"
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.10"
+fastapi = ">=0.121.0,<0.122.0"
+uvicorn = {extras = ["standard"], version = ">=0.27.0"}
+langchain = ">=1.0.3,<2.0.0"
+langchain-community = ">=0.3.0"
+langchain-openai = ">=1.0.0,<2.0.0"
+langchain-core = ">=0.3.0"
+python-dotenv = ">=1.2.1,<2.0.0"
+pydantic = ">=2.0.0,<3.0.0"
+python-multipart = ">=0.0.6,<1.0.0"
+faiss-cpu = ">=1.7.0,<2.0.0"
+python-docx = ">=1.0.0,<2.0.0"
+numpy = ">=1.24.0"
+tiktoken = ">=0.5.0"
+# 本地嵌入（可选）
+sentence-transformers = {version = ">=2.2.0", optional = true}
+langchain-huggingface = {version = ">=0.0.1", optional = true}
+
+[tool.poetry.extras]
+local-embedding = ["sentence-transformers", "langchain-huggingface"]
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

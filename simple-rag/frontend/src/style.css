@@ -1,0 +1,46 @@
+/* 知识库主题变量 */
+:root {
+  --kb-primary: #2563eb;
+  --kb-primary-hover: #1d4ed8;
+  --kb-primary-light: #eff6ff;
+  --kb-sidebar-bg: #f8fafc;
+  --kb-sidebar-border: #e2e8f0;
+  --kb-main-bg: #f1f5f9;
+  --kb-card-bg: #ffffff;
+  --kb-card-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --kb-text-primary: #0f172a;
+  --kb-text-secondary: #64748b;
+  --kb-text-muted: #94a3b8;
+  --kb-radius: 12px;
+  --kb-radius-sm: 8px;
+  --kb-font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans SC", sans-serif;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--kb-font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color: var(--kb-text-primary);
+  background: var(--kb-main-bg);
+}
+
+#app {
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* Element Plus 覆盖：与主题一致 */
+.el-button--primary {
+  background-color: var(--kb-primary);
+  border-color: var(--kb-primary);
+}
+.el-button--primary:hover {
+  background-color: var(--kb-primary-hover);
+  border-color: var(--kb-primary-hover);
+}
