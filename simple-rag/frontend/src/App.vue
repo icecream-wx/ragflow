@@ -295,7 +295,8 @@ onMounted(() => {
   flex: 1;
   min-width: 0;
   height: 100vh;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
   background: var(--kb-main-bg);
 }
 

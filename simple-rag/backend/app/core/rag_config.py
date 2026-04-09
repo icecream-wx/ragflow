@@ -17,11 +17,12 @@ class RAGConfig:
         self.top_n_rerank = int(os.getenv("RAG_TOP_N_RERANK", "3"))
         self.chunk_size = int(os.getenv("RAG_CHUNK_SIZE", "500"))
         self.chunk_overlap = int(os.getenv("RAG_CHUNK_OVERLAP", "50"))
+        self.chunk_strategy = (os.getenv("RAG_CHUNK_STRATEGY", "recursive")).strip().lower()
 
         self._validate()
         app_logger.info(
             f"RAG 配置: top_k_recall={self.top_k_recall}, "
-            f"top_n_rerank={self.top_n_rerank}, chunk_size={self.chunk_size}"
+            f"top_n_rerank={self.top_n_rerank}, chunk_size={self.chunk_size}, chunk_strategy={self.chunk_strategy}"
         )
 
     def _validate(self):
@@ -29,6 +30,9 @@ class RAGConfig:
             self.top_k_recall = 10
         if self.top_n_rerank < 1 or self.top_n_rerank > self.top_k_recall:
             self.top_n_rerank = min(3, self.top_k_recall)
+        from app.utils.chunk_strategies import get_supported_strategy_ids
+        if self.chunk_strategy not in get_supported_strategy_ids():
+            self.chunk_strategy = "recursive"
 
 
 _rag_config: Optional[RAGConfig] = None

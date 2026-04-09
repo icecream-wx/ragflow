@@ -10,11 +10,29 @@
           <span class="stat-value">{{ stats.chunk_count }}</span>
           <span class="stat-label">知识片段数</span>
         </div>
+        <div class="stat-card stat-card-config">
+          <span class="stat-label">当前分块配置</span>
+          <span class="stat-config">大小 {{ stats.chunk_size ?? 500 }} · 重叠 {{ stats.chunk_overlap ?? 50 }} · {{ currentStrategyName }}</span>
+        </div>
       </div>
     </header>
 
     <div class="upload-section">
       <el-card class="upload-card" shadow="never">
+        <div class="chunk-strategy-row">
+          <span class="chunk-strategy-label">本次上传分块策略</span>
+          <el-select v-model="uploadChunkStrategy" placeholder="使用服务端默认" clearable class="chunk-strategy-select">
+            <el-option
+              v-for="s in chunkStrategies"
+              :key="s.id"
+              :label="s.name"
+              :value="s.id"
+            >
+              <span>{{ s.name }}</span>
+              <span class="option-desc">{{ s.description }}</span>
+            </el-option>
+          </el-select>
+        </div>
         <el-upload
           ref="uploadRef"
           class="upload-dragger-wrap"
@@ -65,27 +83,136 @@
           </el-button>
         </div>
       </el-card>
+
+      <el-card class="strategies-card" shadow="never">
+        <template #header>
+          <span>当前项目支持的分块策略</span>
+        </template>
+        <ul class="strategies-list">
+          <li v-for="s in chunkStrategies" :key="s.id" class="strategy-item">
+            <span class="strategy-name">{{ s.name }}</span>
+            <span class="strategy-id">（{{ s.id }}）</span>
+            <p class="strategy-desc">{{ s.description }}</p>
+          </li>
+          <li v-if="chunkStrategies.length === 0 && !chunksLoading" class="strategy-item">加载中…</li>
+        </ul>
+      </el-card>
     </div>
+
+    <!-- 知识片段列表 -->
+    <div class="chunks-section">
+      <el-card class="chunks-card" shadow="never">
+        <template #header>
+          <div class="chunks-card-header">
+            <span>知识片段列表</span>
+            <el-button type="primary" link :loading="chunksLoading" @click="loadChunks">
+              <el-icon><Refresh /></el-icon>
+              刷新
+            </el-button>
+          </div>
+        </template>
+        <div v-if="chunksLoading && chunks.length === 0" class="chunks-loading">加载中...</div>
+        <div v-else-if="chunks.length === 0" class="chunks-empty">暂无知识片段，请先上传文档。</div>
+        <div v-else class="chunks-table-wrap">
+          <el-table :data="chunks" stripe style="width: 100%">
+            <el-table-column type="index" label="#" width="50" :index="(i: number) => i + 1" />
+            <el-table-column prop="metadata.source" label="来源" width="140" show-overflow-tooltip>
+              <template #default="{ row }">{{ row.metadata?.source ?? '-' }}</template>
+            </el-table-column>
+            <el-table-column label="内容预览" min-width="200" show-overflow-tooltip>
+              <template #default="{ row }">{{ contentPreview(row.content) }}</template>
+            </el-table-column>
+            <el-table-column label="向量预览" width="200">
+              <template #default="{ row }">
+                <span class="vector-preview">{{ formatVectorPreview(row) }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="100" fixed="right">
+              <template #default="{ row }">
+                <el-button type="primary" link size="small" @click="openDetail(row)">查看详情</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+      </el-card>
+    </div>
+
+    <!-- 片段详情弹窗：分片内容 + 向量 -->
+    <el-dialog
+      v-model="detailVisible"
+      title="知识片段详情"
+      width="560px"
+      class="chunk-detail-dialog"
+      destroy-on-close
+    >
+      <div v-if="currentChunk" class="chunk-detail">
+        <div class="detail-block">
+          <div class="detail-label">来源</div>
+          <div class="detail-value">{{ currentChunk.metadata?.source ?? '-' }}</div>
+        </div>
+        <div class="detail-block">
+          <div class="detail-label">分片内容</div>
+          <div class="detail-content">{{ currentChunk.content || '-' }}</div>
+        </div>
+        <div class="detail-block">
+          <div class="detail-label">Embedding 向量</div>
+          <div class="detail-vector">{{ formatVectorPreview(currentChunk) }}</div>
+          <div v-if="currentChunk.vector_dim > vectorDisplayDims" class="detail-vector-tip">
+            共 {{ currentChunk.vector_dim }} 维，仅展示前 {{ vectorDisplayDims }} 维
+          </div>
+        </div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { UploadFile, UploadInstance } from 'element-plus'
-import { Document, UploadFilled } from '@element-plus/icons-vue'
-import { uploadFilesToKnowledge, getKnowledgeStats } from '../api/knowledge'
+import { Document, UploadFilled, Refresh } from '@element-plus/icons-vue'
+import { uploadFilesToKnowledge, getKnowledgeStats, getKnowledgeChunks, getChunkStrategies, type KnowledgeChunkItem, type ChunkStrategyItem } from '../api/knowledge'
 
 const uploadRef = ref<UploadInstance>()
 const uploadLoading = ref(false)
 const fileList = ref<UploadFile[]>([])
-const stats = reactive({ chunk_count: 0 })
+const stats = reactive<{ chunk_count: number; chunk_size?: number; chunk_overlap?: number; chunk_strategy?: string }>({ chunk_count: 0 })
+
+const chunkStrategies = ref<ChunkStrategyItem[]>([])
+const uploadChunkStrategy = ref<string | undefined>(undefined)
+
+const currentStrategyName = computed(() => {
+  const id = stats.chunk_strategy || 'recursive'
+  const s = chunkStrategies.value.find((x) => x.id === id)
+  return s ? s.name : id
+})
+
+const chunks = ref<KnowledgeChunkItem[]>([])
+const chunksLoading = ref(false)
+const detailVisible = ref(false)
+const currentChunk = ref<KnowledgeChunkItem | null>(null)
+const vectorDisplayDims = 10
 
 function formatSize(bytes?: number): string {
   if (bytes == null || bytes === 0) return '-'
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function contentPreview(content: string, maxLen = 80): string {
+  if (!content) return '-'
+  const t = content.trim()
+  return t.length <= maxLen ? t : t.slice(0, maxLen) + '...'
+}
+
+function formatVectorPreview(row: KnowledgeChunkItem): string {
+  const preview = row.vector_preview || []
+  const dim = row.vector_dim || 0
+  if (dim === 0 && preview.length === 0) return '-'
+  const part = preview.map((x) => Number(x).toFixed(2)).join(', ')
+  if (dim > preview.length) return `[${part}, ...]`
+  return `[${part}]`
 }
 
 const onFileChange = (_file: UploadFile, files: UploadFile[]) => {
@@ -101,6 +228,23 @@ const clearFiles = () => {
   uploadRef.value?.clearFiles()
 }
 
+const loadChunks = async () => {
+  chunksLoading.value = true
+  try {
+    const res = await getKnowledgeChunks(vectorDisplayDims)
+    chunks.value = res.data?.chunks ?? []
+  } catch {
+    chunks.value = []
+  } finally {
+    chunksLoading.value = false
+  }
+}
+
+const openDetail = (row: KnowledgeChunkItem) => {
+  currentChunk.value = row
+  detailVisible.value = true
+}
+
 const handleUpload = async () => {
   if (fileList.value.length === 0) return
   const rawFiles = fileList.value.map((f) => f.raw).filter(Boolean) as File[]
@@ -111,10 +255,11 @@ const handleUpload = async () => {
 
   uploadLoading.value = true
   try {
-    const res = await uploadFilesToKnowledge(rawFiles)
+    const res = await uploadFilesToKnowledge(rawFiles, uploadChunkStrategy.value || undefined)
     ElMessage.success(res.message || `已上传 ${res.data?.uploaded ?? 0} 个文件，共 ${res.data?.chunks ?? 0} 个分片`)
     clearFiles()
     await loadStats()
+    await loadChunks()
   } catch (e: any) {
     ElMessage.error(e.response?.data?.message || e.message || '上传失败')
   } finally {
@@ -125,14 +270,29 @@ const handleUpload = async () => {
 const loadStats = async () => {
   try {
     const res = await getKnowledgeStats()
-    stats.chunk_count = res.data?.chunk_count ?? 0
+    const d = res.data
+    stats.chunk_count = d?.chunk_count ?? 0
+    stats.chunk_size = d?.chunk_size
+    stats.chunk_overlap = d?.chunk_overlap
+    stats.chunk_strategy = d?.chunk_strategy
   } catch {
     // ignore
   }
 }
 
+const loadChunkStrategies = async () => {
+  try {
+    const res = await getChunkStrategies()
+    chunkStrategies.value = res.data?.strategies ?? []
+  } catch {
+    chunkStrategies.value = []
+  }
+}
+
 onMounted(() => {
   loadStats()
+  loadChunks()
+  loadChunkStrategies()
 })
 </script>
 
@@ -193,6 +353,89 @@ onMounted(() => {
   color: var(--kb-text-muted);
   margin-top: 4px;
   display: block;
+}
+
+.stat-card-config {
+  flex: 1;
+  min-width: 0;
+}
+
+.stat-card-config .stat-label {
+  margin-top: 0;
+}
+
+.stat-config {
+  display: block;
+  font-size: 13px;
+  color: var(--kb-text-primary);
+  margin-top: 4px;
+}
+
+.chunk-strategy-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.chunk-strategy-label {
+  font-size: 14px;
+  color: var(--kb-text-secondary);
+  flex-shrink: 0;
+}
+
+.chunk-strategy-select {
+  width: 320px;
+}
+
+.chunk-strategy-select :deep(.el-select__wrapper) {
+  min-height: 36px;
+}
+
+.option-desc {
+  display: block;
+  font-size: 12px;
+  color: var(--kb-text-muted);
+  margin-top: 2px;
+}
+
+.strategies-card {
+  margin-top: 16px;
+  border-radius: var(--kb-radius);
+  border: 1px solid var(--kb-sidebar-border);
+}
+
+.strategies-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.strategy-item {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--kb-sidebar-border);
+}
+
+.strategy-item:last-child {
+  border-bottom: none;
+}
+
+.strategy-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--kb-text-primary);
+}
+
+.strategy-id {
+  font-size: 12px;
+  color: var(--kb-text-muted);
+}
+
+.strategy-desc {
+  font-size: 13px;
+  color: var(--kb-text-secondary);
+  margin: 4px 0 0;
+  line-height: 1.5;
 }
 
 .upload-section {
@@ -315,5 +558,90 @@ onMounted(() => {
 
 .mr-1 {
   margin-right: 6px;
+}
+
+.chunks-section {
+  margin-top: 24px;
+}
+
+.chunks-card {
+  border-radius: var(--kb-radius);
+  border: 1px solid var(--kb-sidebar-border);
+}
+
+.chunks-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.chunks-loading,
+.chunks-empty {
+  padding: 24px;
+  text-align: center;
+  color: var(--kb-text-muted);
+  font-size: 14px;
+}
+
+.chunks-table-wrap {
+  max-height: min(420px, 50vh);
+  overflow-y: auto;
+  overflow-x: auto;
+}
+
+.vector-preview {
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  color: var(--kb-text-secondary);
+}
+
+.chunk-detail-dialog .chunk-detail {
+  padding: 0 4px;
+}
+
+.detail-block {
+  margin-bottom: 20px;
+}
+
+.detail-block:last-child {
+  margin-bottom: 0;
+}
+
+.detail-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--kb-text-muted);
+  margin-bottom: 6px;
+}
+
+.detail-value {
+  font-size: 14px;
+  color: var(--kb-text-primary);
+}
+
+.detail-content {
+  font-size: 14px;
+  color: var(--kb-text-primary);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 12px;
+  background: var(--kb-sidebar-bg);
+  border-radius: var(--kb-radius-sm);
+}
+
+.detail-vector {
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+  color: var(--kb-text-primary);
+  word-break: break-all;
+}
+
+.detail-vector-tip {
+  font-size: 12px;
+  color: var(--kb-text-muted);
+  margin-top: 6px;
 }
 </style>

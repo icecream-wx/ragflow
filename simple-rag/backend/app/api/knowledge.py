@@ -1,27 +1,36 @@
 """
 知识库 API：本地上传 txt/word 等文件 -> 解析 -> 分片 -> 向量化 -> 写入内存向量库
 """
-from fastapi import APIRouter, UploadFile, File
+from typing import Optional
+from fastapi import APIRouter, UploadFile, File, Query
 from app.core.response import ResponseModel
 from app.core.logger import app_logger
 from app.core.rag_config import get_rag_config
 from app.services.file_parser import parse_file, ALLOWED_EXTENSIONS
 from app.services.vector_store_memory import get_memory_vector_store
 from app.utils.text_utils import chunk_text
+from app.utils.chunk_strategies import CHUNK_STRATEGIES, get_supported_strategy_ids
 
 router = APIRouter()
 
 
 @router.post("/upload")
-async def upload_files(files: list[UploadFile] = File(...)):
+async def upload_files(
+    files: list[UploadFile] = File(...),
+    chunk_strategy: Optional[str] = Query(None, description="本次上传使用的分块策略，不传则使用服务端默认配置"),
+):
     """
     上传本地文件（txt、docx 等）到知识库：解析 -> 分片 -> 向量化 -> 写入内存向量库。
+    支持通过 query 参数 chunk_strategy 指定本次上传的分块策略。
     """
     if not files:
         return ResponseModel.error(message="请选择至少一个文件", code=400)
 
     cfg = get_rag_config()
     store = get_memory_vector_store()
+    strategy = (chunk_strategy or cfg.chunk_strategy).strip().lower()
+    if strategy not in get_supported_strategy_ids():
+        strategy = cfg.chunk_strategy
 
     all_texts = []
     all_metadatas = []
@@ -54,6 +63,7 @@ async def upload_files(files: list[UploadFile] = File(...)):
             text.strip(),
             chunk_size=cfg.chunk_size,
             chunk_overlap=cfg.chunk_overlap,
+            strategy=strategy,
         )
         for c in chunks:
             if c and c.strip():
@@ -85,13 +95,51 @@ async def upload_files(files: list[UploadFile] = File(...)):
 
 @router.get("/stats")
 async def knowledge_stats():
-    """知识库统计：当前内存向量库中的片段数量。"""
+    """知识库统计：当前内存向量库中的片段数量及当前分块配置。"""
     try:
         store = get_memory_vector_store()
         count = store.count()
-        return ResponseModel.success(data={"chunk_count": count}, message="获取成功")
+        cfg = get_rag_config()
+        return ResponseModel.success(
+            data={
+                "chunk_count": count,
+                "chunk_size": cfg.chunk_size,
+                "chunk_overlap": cfg.chunk_overlap,
+                "chunk_strategy": cfg.chunk_strategy,
+            },
+            message="获取成功",
+        )
     except Exception as e:
         app_logger.error(f"知识库统计失败: {e}", exc_info=True)
+        return ResponseModel.error(message=str(e), code=500)
+
+
+@router.get("/chunk-strategies")
+async def list_chunk_strategies():
+    """返回当前项目支持的知识分块策略列表（id、名称、描述）。"""
+    return ResponseModel.success(
+        data={"strategies": CHUNK_STRATEGIES},
+        message="获取成功",
+    )
+
+
+@router.get("/chunks")
+async def list_knowledge_chunks(vector_display_dims: int = 10):
+    """
+    获取知识库中所有片段详情，包含分片内容与 embedding 向量预览。
+    vector_display_dims: 向量在响应中保留的维度数，超出部分仅返回总维度供前端省略显示，默认 10。
+    """
+    if vector_display_dims < 0 or vector_display_dims > 100:
+        vector_display_dims = 10
+    try:
+        store = get_memory_vector_store()
+        chunks = store.list_chunks_with_vectors(vector_display_dims=vector_display_dims)
+        return ResponseModel.success(
+            data={"chunks": chunks, "total": len(chunks)},
+            message="获取成功",
+        )
+    except Exception as e:
+        app_logger.error(f"获取知识片段列表失败: {e}", exc_info=True)
         return ResponseModel.error(message=str(e), code=500)
 
 

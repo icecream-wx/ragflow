@@ -1,17 +1,21 @@
 """
 文本处理：分片、拼接等
 """
-from typing import List
+from typing import List, Optional
+
+from app.utils.chunk_strategies import get_separators_for_strategy
 
 
 def chunk_text(
     text: str,
     chunk_size: int = 500,
     chunk_overlap: int = 50,
-    separators: List[str] = None
+    separators: Optional[List[str]] = None,
+    strategy: str = "recursive",
 ) -> List[str]:
     """
     将长文本按固定大小分片，支持重叠以避免截断语义。
+    strategy: 分块策略 id，见 chunk_strategies.CHUNK_STRATEGIES；仅在 separators 未指定时生效。
     """
     if not text or not text.strip():
         return []
@@ -20,7 +24,8 @@ def chunk_text(
     if len(text) <= chunk_size:
         return [text] if text else []
 
-    separators = separators or ["\n\n", "\n", "。", ".", " ", ""]
+    if separators is None:
+        separators = get_separators_for_strategy(strategy)
     chunks: List[str] = []
     start = 0
 

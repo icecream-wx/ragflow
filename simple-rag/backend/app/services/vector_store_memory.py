@@ -71,6 +71,62 @@ class InMemoryVectorStore:
         except Exception:
             return 0
 
+    def list_chunks_with_vectors(self, vector_display_dims: int = 10) -> List[Dict]:
+        """
+        列出所有知识片段，包含内容与向量预览。
+        vector_display_dims: 向量在响应中保留的维度数，超出部分仅返回维度总数供前端省略显示。
+        返回: [{"index": 0, "content": "...", "metadata": {...}, "vector_preview": [f,...], "vector_dim": n}, ...]
+        """
+        if self._store is None:
+            return []
+        out = []
+        try:
+            docstore = self._store.docstore
+            index_to_id = getattr(self._store, "index_to_docstore_id", None)
+            if not index_to_id:
+                # 无映射时仅从 docstore 列出文档（无向量）
+                for i, (doc_id, doc) in enumerate(docstore._dict.items()):
+                    content = getattr(doc, "page_content", None) or ""
+                    meta = getattr(doc, "metadata", None) or {}
+                    out.append({
+                        "index": i,
+                        "id": doc_id,
+                        "content": content,
+                        "metadata": meta,
+                        "vector_preview": [],
+                        "vector_dim": 0,
+                    })
+                return out
+            faiss_index = self._store.index
+            for idx, doc_id in index_to_id.items():
+                doc = docstore._dict.get(doc_id)
+                if doc is None:
+                    continue
+                content = getattr(doc, "page_content", None) or ""
+                meta = getattr(doc, "metadata", None) or {}
+                vector_preview = []
+                vector_dim = 0
+                try:
+                    vec = faiss_index.reconstruct(int(idx))
+                    if hasattr(vec, "tolist"):
+                        vec = vec.tolist()
+                    vector_dim = len(vec)
+                    n = min(vector_display_dims, vector_dim)
+                    vector_preview = [round(float(x), 4) for x in vec[:n]]
+                except Exception:
+                    pass
+                out.append({
+                    "index": len(out),
+                    "id": doc_id,
+                    "content": content,
+                    "metadata": meta,
+                    "vector_preview": vector_preview,
+                    "vector_dim": vector_dim,
+                })
+        except Exception as e:
+            app_logger.error(f"list_chunks_with_vectors 失败: {e}", exc_info=True)
+        return out
+
 
 _memory_store: Optional[InMemoryVectorStore] = None
 

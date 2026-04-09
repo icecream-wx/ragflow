@@ -108,8 +108,86 @@ npm run dev
 | `RAG_TOP_N_RERANK` | 重排后保留条数 | `3` |
 | `RAG_CHUNK_SIZE` | 分片大小（字符） | `500` |
 | `RAG_CHUNK_OVERLAP` | 分片重叠（字符） | `50` |
+| `RAG_CHUNK_STRATEGY` | 分块策略：recursive / paragraph / sentence / fixed | `recursive` |
 | `EMBEDDING_TYPE` | 嵌入方式：local / openai | `local` |
 | `EMBEDDING_MODEL` | 嵌入模型名 | 见 .env.example |
+
+**当前支持的分块策略**（可通过 `RAG_CHUNK_STRATEGY` 或上传时选择）：
+
+| 策略 id | 说明 |
+|--------|------|
+| `recursive` | 递归分段（推荐）：优先按段落、换行、句号分片，兼顾中英文 |
+| `paragraph` | 段落优先：优先按双换行、单换行分片，适合长文 |
+| `sentence` | 句子优先：优先按句号、问号、感叹号分片，适合问答/对话 |
+| `fixed` | 固定长度：严格按字符数切分，不寻找分隔符，适合无标点或代码 |
+
+---
+
+### 完全本地化嵌入（预下载任意 Hub 模型、可选强制离线）
+
+思路：在 [Hugging Face](https://huggingface.co/models?pipeline_tag=sentence-similarity)（或模型官方页）选定嵌入模型，记下 **`REPO_ID`**（形如 `组织名/模型名`，与网页 URL 一致），把权重下载到本机 **`LOCAL_DIR`**，再把 `EMBEDDING_MODEL` 设为该目录的绝对路径。
+
+1. **准备变量（自行替换）**
+
+   - **`<REPO_ID>`**：例如轻量多语种 `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`，或大模型 **`Qwen/Qwen3-Embedding-8B`**（体积与显存/内存占用大，需磁盘空间与 GPU 时请将 `EMBEDDING_DEVICE=cuda`）。
+   - **`<LOCAL_DIR>`**：本机空目录，用于存放完整模型文件，例如 Linux/macOS `/path/to/my-embedding`，Windows `E:\models\my-embedding`。
+
+   若模型为 **Gated**（需同意协议），请先在网页上申请访问，并在下载与运行环境中配置 `HF_TOKEN`（或 `huggingface-cli login`）。
+
+2. **下载到 `<LOCAL_DIR>`**（下载阶段若直连 Hub 失败，可临时使用镜像或 VPN）：
+
+   ```bash
+   pip install huggingface_hub
+   huggingface-cli download <REPO_ID> --local-dir <LOCAL_DIR>
+   ```
+
+   国内可临时指定镜像（地址以当前可用为准）：
+
+   ```bash
+   # Linux / macOS
+   export HF_ENDPOINT=https://hf-mirror.com
+   huggingface-cli download <REPO_ID> --local-dir <LOCAL_DIR>
+   ```
+
+   ```powershell
+   # Windows PowerShell
+   $env:HF_ENDPOINT="https://hf-mirror.com"
+   huggingface-cli download <REPO_ID> --local-dir <LOCAL_DIR>
+   ```
+
+   等价 Python（将占位符换成实际值）：
+
+   ```python
+   from huggingface_hub import snapshot_download
+   snapshot_download(
+       repo_id="<REPO_ID>",
+       local_dir=r"<LOCAL_DIR>",
+       local_dir_use_symlinks=False,
+   )
+   ```
+
+   也可从 [ModelScope](https://modelscope.cn) 等镜像站下载**同一模型或官方声明的等价权重**到 `<LOCAL_DIR>`，目录内需包含 `transformers` / `sentence-transformers` 可识别的完整文件（如 `config.json`、`*.safetensors` 或 `pytorch_model.bin`、tokenizer 相关文件等）。
+
+3. **兼容性说明**：嵌入模型须能被本项目的 `HuggingFaceEmbeddings` 正常加载。若模型卡片要求 `trust_remote_code=True`、指定 `revision` 或额外依赖，加载失败时请按官方说明调整 [`backend/app/services/embedding_service.py`](backend/app/services/embedding_service.py) 中的 `model_kwargs` / 依赖，或换用该模型推荐的加载方式。
+
+4. **在 `.env` 中指向本地目录**（绝对路径；Windows 建议用正斜杠）：
+
+   ```env
+   EMBEDDING_TYPE=local
+   EMBEDDING_MODEL=<LOCAL_DIR>
+   EMBEDDING_DEVICE=cpu
+   ```
+
+   使用 **`Qwen/Qwen3-Embedding-8B`** 且走 GPU 时，将 `EMBEDDING_DEVICE` 改为 `cuda`（并确保环境与显存满足模型要求）。
+
+5. **（可选）强制离线**：模型已完整缓存到 `<LOCAL_DIR>` 且能稳定加载后再开启，避免运行期仍访问 Hub：
+
+   ```env
+   HF_HUB_OFFLINE=1
+   TRANSFORMERS_OFFLINE=1
+   ```
+
+6. **自检**：断网或关闭 VPN 后启动后端并上传小段文本做向量化；成功即表示嵌入已完全依赖本地文件。
 
 ---
 
@@ -122,8 +200,10 @@ npm run dev
 | GET | `/api/chat/chat` | 与 AI 对话（SSE 流式，带 RAG） |
 | GET | `/api/chat/history/{session_id}` | 获取会话历史 |
 | GET | `/api/chat/sessions` | 获取会话列表 |
-| POST | `/api/knowledge/upload` | 上传文件到知识库（multipart） |
-| GET | `/api/knowledge/stats` | 知识库片段数统计 |
+| POST | `/api/knowledge/upload` | 上传文件到知识库（multipart，可选 query `chunk_strategy`） |
+| GET | `/api/knowledge/stats` | 知识库片段数及当前分块配置 |
+| GET | `/api/knowledge/chunk-strategies` | 支持的分块策略列表 |
+| GET | `/api/knowledge/chunks` | 知识片段详情（含向量预览） |
 
 ---
 
